@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TempoKey</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/frame.css">
+<link rel="stylesheet" href="css/controls.css">
+<link rel="stylesheet" href="css/effects.css">
+<link rel="stylesheet" href="css/splash.css">
+</head>
+<body>
+
+<div id="frame" class="splash" data-tauri-drag-region>
+  <div class="sp-head">
+    <div class="tb-logo sp-chip">
+      <svg viewBox="0 0 30 20"><polyline class="lp" points="1,11 8,11 11,3 16,18 19,7 21.5,11 29,11"/><polyline class="lc" points="1,11 8,11 11,3 16,18 19,7 21.5,11 29,11"/><polyline points="1,11 8,11 11,3 16,18 19,7 21.5,11 29,11"/></svg>
+    </div>
+    <div class="sp-titles">
+      <div class="disp idle sp-name" data-text="TEMPOKEY">TEMPOKEY</div>
+      <div class="sp-sub">BPM · KEY DETECTOR</div>
+    </div>
+    <div class="tb-deco sp-deco"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <div class="sp-log" id="spLog"></div>
+
+  <div class="sp-foot">
+    <div class="cprog big active" id="spProg"><div class="fill"></div></div>
+    <div class="sp-row">
+      <span class="sp-step" id="spStep">STARTING</span>
+      <span class="sp-pct" id="spPct">0%</span>
+      <span class="sp-ver">V1.0.0</span>
+    </div>
+  </div>
+  <div class="prism" id="prism"></div>
+</div>
+
+<svg id="edge" aria-hidden="true">
+  <polygon class="e-glow"/>
+  <polygon class="e-p"/>
+  <polygon class="e-c"/>
+  <polygon class="e-y"/>
+  <polyline class="acc-p" id="accP"/>
+  <polyline class="acc-c" id="accC"/>
+  <polyline class="acc-y" id="accY"/>
+</svg>
+
+<script type="module" src="js/splash.js"></script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TempoKey — BPM &amp; Key Detector</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/frame.css">
+<link rel="stylesheet" href="css/controls.css">
+<link rel="stylesheet" href="css/panels.css">
+<link rel="stylesheet" href="css/effects.css">
+</head>
+<body class="no-tracks">
+
+<div id="frame">
+  <header id="titlebar" data-tauri-drag-region>
+    <div class="tb-logo">
+      <svg viewBox="0 0 30 20"><polyline class="lp" points="1,11 8,11 11,3 16,18 19,7 21.5,11 29,11"/><polyline class="lc" points="1,11 8,11 11,3 16,18 19,7 21.5,11 29,11"/><polyline points="1,11 8,11 11,3 16,18 19,7 21.5,11 29,11"/></svg>
+    </div>
+    <div class="tb-title"><span class="disp idle" data-text="TEMPOKEY">TEMPOKEY</span><span class="tb-sub">// BPM · KEY DETECTOR</span></div>
+    <div class="tb-deco"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="win-btns">
+      <button class="wbtn min" id="btnMin" title="Minimize"><svg viewBox="0 0 12 12"><line x1="1" y1="9" x2="11" y2="9"/></svg></button>
+      <button class="wbtn max" id="btnMax" title="Maximize"><svg viewBox="0 0 12 12"><rect class="enlarge" x="1.5" y="1.5" width="9" height="9"/><g class="restore"><rect x="1.5" y="4" width="6.5" height="6.5"/><polyline points="4,2 10,2 10,8"/></g></svg></button>
+      <button class="wbtn close" id="btnClose" title="Close"><svg viewBox="0 0 12 12"><line x1="1.5" y1="1.5" x2="10.5" y2="10.5"/><line x1="10.5" y1="1.5" x2="1.5" y2="10.5"/></svg></button>
+    </div>
+  </header>
+
+  <nav id="toolbar">
+    <button class="cbtn arrow y" id="btnFiles"><span>+ FILES</span></button>
+    <button class="cbtn arrow c" id="btnFolder"><span>+ FOLDER</span></button>
+    <div class="tb-sep"></div>
+    <button class="cbtn p" id="btnStop" disabled><span>STOP</span></button>
+    <button class="cbtn" id="btnClear" disabled><span>CLEAR</span></button>
+    <button class="cbtn c" id="btnExport" disabled><span>EXPORT CSV</span></button>
+    <div class="grow"></div>
+    <label class="flabel" for="bpmMin">BPM RANGE</label>
+    <span class="cfield"><input id="bpmMin" type="number" min="20" max="400" step="1"></span>
+    <span class="dash">—</span>
+    <span class="cfield"><input id="bpmMax" type="number" min="20" max="400" step="1"></span>
+  </nav>
+
+  <main id="main">
+    <section class="panel" id="listPanel">
+      <div class="pin">
+        <div class="subbar">
+          <div class="heading">TRACKS <span class="count" id="trackCount">0</span></div>
+          <div class="grow"></div>
+          <span class="flabel">KEY</span>
+          <div id="selNotation"></div>
+          <span class="flabel">BPM</span>
+          <div id="selDecimals"></div>
+        </div>
+        <div class="list-head" id="listHead">
+          <span data-sort="num">#</span>
+          <span data-sort="name">TRACK</span>
+          <span data-sort="bpm">BPM</span>
+          <span data-sort="key">KEY</span>
+          <span data-sort="tune" class="h-tune">TUNING</span>
+          <span data-sort="time" class="h-time">TIME</span>
+          <span data-sort="status">STATUS</span>
+        </div>
+        <div id="trackList" role="listbox" tabindex="0" aria-label="Tracks"></div>
+        <div id="empty">
+          <div class="empty-box">
+            <div class="drop-arrow"></div>
+            <div class="disp idle" data-text="DROP TRACKS HERE">DROP TRACKS HERE</div>
+            <div class="formats">FLAC · WAV · MP3 · AAC · M4A · OGG</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel pink" id="detail">
+      <div class="pin">
+        <div class="d-empty"><div class="hex"></div><span>NO TRACK SELECTED</span></div>
+        <div class="d-scroll">
+          <div class="d-head">
+            <span class="d-name" id="dName"></span>
+            <div class="d-path" id="dPath"></div>
+          </div>
+          <div class="d-proc">
+            <div class="stages">
+              <span class="stage" data-s="0"><span>DECODE</span></span>
+              <span class="stage" data-s="1"><span>TEMPO</span></span>
+              <span class="stage" data-s="2"><span>KEY</span></span>
+            </div>
+            <div class="cprog big" id="dProg"><div class="fill"></div><span class="pct">0%</span></div>
+            <div class="proc-msg" id="dProcMsg"></div>
+          </div>
+          <div class="d-result">
+          <div class="d-readouts">
+            <div class="ro bpm">
+              <div class="ro-cap">BPM</div>
+              <div class="ro-val"><span class="disp" id="dBpm" data-text=""></span><span class="ro-frac" id="dBpmFrac"></span></div>
+              <div class="ro-bar"><i id="dBpmConf"></i></div>
+              <div class="ro-sub" id="dBpmSub"></div>
+            </div>
+            <div class="ro key">
+              <div class="ro-cap">KEY</div>
+              <div class="ro-val"><span class="disp pink" id="dKey" data-text=""></span></div>
+              <div class="ro-bar"><i id="dKeyConf"></i></div>
+              <div class="ro-sub" id="dKeySub"></div>
+            </div>
+          </div>
+          <div class="d-cands">
+            <div><div class="cap">TEMPO CANDIDATES</div><div class="mini" id="dBpmList" role="listbox"></div></div>
+            <div><div class="cap">KEY CANDIDATES</div><div class="mini" id="dKeyList" role="listbox"></div></div>
+          </div>
+          <div class="d-block"><div class="cap">BEAT GRID <span class="v" id="dGridAt"></span></div><canvas id="cvGrid"></canvas></div>
+          <div class="d-block"><div class="cap">OVERVIEW</div><canvas id="cvWave"></canvas></div>
+          <div class="d-bottom">
+            <div class="d-block"><div class="cap">PITCH</div><canvas id="cvWheel"></canvas></div>
+            <div>
+              <div class="d-block"><div class="cap">TEMPO DRIFT <span class="v" id="dDrift"></span></div><canvas id="cvDrift"></canvas></div>
+            </div>
+          </div>
+          <dl class="meta" id="dMeta"></dl>
+          </div>
+        </div>
+        <div class="prism" id="prism"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer id="statusbar">
+    <div class="sb-left">
+      <span class="sb-cap">PROCESS</span>
+      <div class="cprog" id="sbProg"><div class="fill"></div></div>
+    </div>
+    <div class="sb-notch"></div>
+    <span class="sb-pct" id="sbPct">0%</span>
+    <div class="sb-text" id="sbText"></div>
+    <div class="sb-grow"></div>
+    <div class="grip" id="grip"></div>
+  </footer>
+</div>
+
+<svg id="edge" aria-hidden="true">
+  <polygon class="e-glow"/>
+  <polygon class="e-p"/>
+  <polygon class="e-c"/>
+  <polygon class="e-y"/>
+  <polyline class="acc-p" id="accP"/>
+  <polyline class="acc-c" id="accC"/>
+  <polyline class="acc-y" id="accY"/>
+</svg>
+
+<div id="dropOverlay"><div class="drop-inner disp" data-text="RELEASE TO ANALYZE">RELEASE TO ANALYZE</div></div>
+
+<div class="rz n" data-dir="North"></div>
+<div class="rz s" data-dir="South"></div>
+<div class="rz w" data-dir="West"></div>
+<div class="rz e" data-dir="East"></div>
+<div class="rz nw" data-dir="NorthWest"></div>
+<div class="rz ne" data-dir="NorthEast"></div>
+<div class="rz sw" data-dir="SouthWest"></div>
+<div class="rz se" data-dir="SouthEast"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
