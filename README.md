@@ -1,127 +1,131 @@
-# TempoKey — темп (BPM) и тональность треков
+# TempoKey — track tempo (BPM) and musical key
 
-Программа на Rust + Tauri 2: разбирает FLAC, WAV, MP3, AAC (ADTS и M4A), OGG Vorbis и показывает темп до сотых,
-тональность (обычная запись, Camelot, Open Key), строй трека (частота ля и отклонение в центах), сетку долей,
-дрейф темпа и профиль высот. Интерфейс — на английском, в стиле киберпанка (розовый, голубой, жёлтый),
-окно своей формы, свой шрифт, дисперсия цвета, заставка при запуске.
+A Rust + Tauri 2 application: it analyzes FLAC, WAV, MP3, AAC (ADTS and M4A) and OGG Vorbis files and shows the tempo
+to a hundredth of a BPM, the key (standard notation, Camelot, Open Key), the track's tuning (reference A frequency and
+deviation in cents), the beat grid, tempo drift and the pitch profile. The interface is in English, cyberpunk-styled
+(pink, cyan, yellow), with a custom window shape, its own font, colour dispersion effects and a splash screen on startup.
 
-## Точность (проверка на треках с известным ответом)
+## Accuracy (checked on tracks with a known answer)
 
-`tools/testgen/check.py` гоняет программу по трекам из `examples/make_tests.rs` (бочка, хэты, малый, бас, аккорды;
-дробные темпы, сдвинутый строй, половинный ритм, трек без ударных):
+`tools/testgen/check.py` runs the program on the tracks from `examples/make_tests.rs` (kick, hi-hats, snare, bass,
+chords; fractional tempos, shifted tuning, half-time rhythm, a track without drums):
 
-| трек | задано | найдено |
+| track | given | detected |
 |---|---|---|
 | t1 | 128, Am, 440 | 128.000, Am, ±0.0 ct |
 | t2 | 145, F♯m, +20 ct | 144.999, F♯m, +20.1 ct |
 | t3 | 87.5, D | 87.501, D, +0.1 ct |
 | t4 | 174, Em | 174.000, Em, +0.2 ct |
-| t5 | 100, C, без ударных | 100.000, C, −2.4 ct |
-| t6 | 124.37, B♭m, A = 432 Гц (−31.8 ct) | 124.370, B♭m, −31.7 ct |
-| t7 | 140, Gm, половинный ритм | 70.00 / 140.00 (оба в кандидатах), Gm |
+| t5 | 100, C, no drums | 100.000, C, −2.4 ct |
+| t6 | 124.37, B♭m, A = 432 Hz (−31.8 ct) | 124.370, B♭m, −31.7 ct |
+| t7 | 140, Gm, half-time | 70.00 / 140.00 (both among candidates), Gm |
 
-Трек 45 с разбирается за ~0,1 с, 5 минут — меньше секунды.
+A 45 s track is analyzed in ~0.1 s, a 5-minute one in under a second.
 
-## Как устроен разбор
+## How the analysis works
 
-### Чтение звука — `src/audio/`
-- `decode.rs` → `decode_mono`: symphonia, все каналы в моно, испорченные пакеты пропускаются, ход по доле кадров.
-- `decimate.rs` → `decimate`, `factor_for`: прореживание в целое число раз до 16…32 кГц (окно Блэкмана, срез 92 %).
-- `mod.rs` → `EXTENSIONS`, `is_audio`: какие файлы берутся из папок.
+### Audio input — `src/audio/`
+- `decode.rs` → `decode_mono`: symphonia, all channels mixed to mono, corrupted packets skipped, progress by frame share.
+- `decimate.rs` → `decimate`, `factor_for`: integer-factor decimation down to 16…32 kHz (Blackman window, cutoff at 92 %).
+- `mod.rs` → `EXTENSIONS`, `is_audio`: which files are picked up from folders.
 
-### Темп — `src/tempo/`
-- `onset.rs` → `superflux`: огибающая атак SuperFlux (Böck, Widmer 2013) — 12 полос на октаву, логарифм,
-  прирост к кадру μ назад с максимумом по трём соседним полосам, 200 кадров в секунду; вычитание местного
-  среднего за 1 с.
-- `salience.rs` → `candidates`: выраженность темпа по Peeters (2007) — обобщённая автокорреляция огибающей ×
-  её спектр; совпадают только на настоящем темпе, ошибки «×2 / ÷2» гаснут. Кандидаты 30…300 BPM.
-- `refine.rs` → `fine_tempo`: уточнение каждого кандидата по всей длине трека — максимум суммы мощности на
-  частоте темпа и трёх гармониках (Гёрцель), два прохода с параболой → сотые доли BPM;
-  `beat_offset` — время первой доли по фазе; `local_tempo` — местный темп окнами 40 с через 20 с.
-- `mod.rs` → `analyze`: кандидаты, слияние близких, обзор огибающей, `densest` — самый насыщенный ударами
-  отрезок 8 с для сетки долей.
-- Выбор темпа из кандидатов по диапазону BPM из окна — `ui/js/music.js` → `chooseTempo`: выраженность ×
-  мягкое предпочтение середины диапазона (центр — среднее геометрическое границ). Кандидата можно выбрать вручную.
+### Tempo — `src/tempo/`
+- `onset.rs` → `superflux`: SuperFlux onset envelope (Böck, Widmer 2013) — 12 bands per octave, logarithm,
+  increase over the frame μ back with a maximum over three neighbouring bands, 200 frames per second; local 1 s mean
+  subtracted.
+- `salience.rs` → `candidates`: tempo salience after Peeters (2007) — generalized autocorrelation of the envelope ×
+  its spectrum; they agree only at the true tempo, so “×2 / ÷2” errors cancel out. Candidates 30…300 BPM.
+- `refine.rs` → `fine_tempo`: each candidate is refined over the whole track — maximum of the summed power at the
+  tempo frequency and its three harmonics (Goertzel), two passes with a parabola → hundredths of a BPM;
+  `beat_offset` — time of the first beat from the phase; `local_tempo` — local tempo in 40 s windows every 20 s.
+- `mod.rs` → `analyze`: candidates, merging of close ones, envelope overview, `densest` — the 8 s excerpt with the
+  densest hits for the beat grid.
+- Choosing the tempo from the candidates within the window's BPM range — `ui/js/music.js` → `chooseTempo`: salience ×
+  a soft preference for the middle of the range (the centre is the geometric mean of the bounds). A candidate can be
+  picked by hand.
 
-### Тональность — `src/key/`
-- `hpss.rs` → `harmonic`: отделение гармонической части от ударной (Fitzgerald 2010) — медианы по времени и
-  частоте, мягкая маска, сборка сигнала обратно; бочка и тарелки не пачкают профиль нот.
-- `hpcp.rs` → `compute`: кадры 0,7 с (разрешение ~1,4 Гц), окно Блэкмана — Харриса, выравнивание спектра,
-  пики с параболическим уточнением → ноты кадра → строй трека по уточнённым основным тонам → профиль 12 ступеней.
-- `notes.rs` → `extract`: ноты кадра по очереди (оценка и вычитание, Klapuri 2006) — основной тон с наибольшей
-  суммой гармоник, его гармоники снимаются; частота ноты — взвешенная медиана по гармоникам. Обертоны
-  (квинта от 3-й гармоники) не попадают в профиль как ноты.
-- `profiles.rs` → `scores`: корреляция с профилями Krumhansl–Kessler, Temperley, Aarden, Bellman–Budge (среднее);
-  `agreement` — уверенность: доля профилей, согласных с итогом.
+### Key — `src/key/`
+- `hpss.rs` → `harmonic`: harmonic/percussive separation (Fitzgerald 2010) — medians over time and frequency, soft
+  mask, signal resynthesis; kick and cymbals don't pollute the note profile.
+- `hpcp.rs` → `compute`: 0.7 s frames (~1.4 Hz resolution), Blackman–Harris window, spectral whitening, peaks with
+  parabolic refinement → notes of the frame → track tuning from the refined fundamentals → 12-step profile.
+- `notes.rs` → `extract`: frame notes one by one (estimation and cancellation, Klapuri 2006) — the fundamental with
+  the largest harmonic sum is taken and its harmonics are removed; the note frequency is a weighted median over the
+  harmonics. Overtones (the fifth from the 3rd harmonic) don't enter the profile as notes.
+- `profiles.rs` → `scores`: correlation with the Krumhansl–Kessler, Temperley, Aarden and Bellman–Budge profiles
+  (averaged); `agreement` — confidence: the share of profiles that agree with the result.
 
-### Общее — `src/dsp/`
-- `spectrum.rs` → `Plan`, `Workspace`: кадровое БПФ (rustfft) по потокам; `window.rs` — окна Ханна и Блэкмана — Харриса;
-  `median.rs` → `median_filter`: скользящая медиана; `mod.rs` → `smooth_size`: быстрые размеры БПФ 2^a·3^b.
+### Shared — `src/dsp/`
+- `spectrum.rs` → `Plan`, `Workspace`: frame FFT (rustfft) across threads; `window.rs` — Hann and Blackman–Harris
+  windows; `median.rs` → `median_filter`: sliding median; `mod.rs` → `smooth_size`: fast FFT sizes 2^a·3^b.
 
-### Программа — `src/`
-- `main.rs`: окно Tauri, команды; `--analyze <файл> --out <json>` — разбор без окна.
-- `analysis.rs` → `analyze_file`: порядок стадий и доли хода (чтение 0–0,33, темп 0,33–0,6, тональность 0,6–1), `cli`.
-- `worker.rs`: очередь — файлы по одному, внутри файла работа на половине ядер; события `track-progress`, `track-done`;
-  отмена по поколению очереди.
-- `commands.rs`: `enqueue_tracks`, `cancel_queue`, `scan_paths` (папки с вложенными), `write_text_file` (CSV с BOM).
-- `shape.rs` → `set_window_shape`: вырез окна по контуру (SetWindowRgn) с поправкой на угол рабочей области
-  (у развёрнутого окна они расходятся на 8 точек). Форма держится только на вырезе: внутри него всё закрашено
-  непрозрачно, прозрачность WebView2 выключена (`transparent: false`, тёмный `backgroundColor`) — она в Windows
-  слетает при скрытом запуске и модальных диалогах и заливается белым. Оба окна создаются скрытыми и
-  показываются только со своим контуром: заставка — как пришлёт контур, главное окно — по готовности
-  (`reveal_main` ставит запомненный контур перед показом).
-- `boot.rs`: заставка — `boot_step` (шаг сборки окна), `boot_status`, `app_ready` (показ главного окна), запасной
-  показ через 10 с.
-- `report.rs`: что уходит в окно.
+### Application — `src/`
+- `main.rs`: Tauri window, commands; `--analyze <file> --out <json>` — analysis without a window.
+- `analysis.rs` → `analyze_file`: stage order and progress shares (decoding 0–0.33, tempo 0.33–0.6, key 0.6–1), `cli`.
+- `worker.rs`: queue — files one at a time, each file processed on half of the cores; `track-progress` and
+  `track-done` events; cancellation by queue generation.
+- `commands.rs`: `enqueue_tracks`, `cancel_queue`, `scan_paths` (folders including subfolders), `write_text_file`
+  (CSV with BOM).
+- `shape.rs` → `set_window_shape`: window region cut along the outline (SetWindowRgn), corrected for the client area
+  corner (in a maximized window they differ by 8 pixels). The shape relies on the region only: everything inside it
+  is painted opaque, WebView2 transparency is off (`transparent: false`, dark `backgroundColor`) — on Windows it gets
+  lost on hidden startup and with modal dialogs and is filled with white. Both windows are created hidden and are
+  shown only with their outline: the splash as soon as it sends its outline, the main window when it's ready
+  (`reveal_main` applies the stored outline before showing it).
+- `boot.rs`: splash — `boot_step` (window build step), `boot_status`, `app_ready` (shows the main window), fallback
+  reveal after 10 s.
+- `report.rs`: what is sent to the window.
 
-## Окно — `ui/`
-- `index.html` — главное окно, `splash.html` — заставка.
-- `css/base.css` — цвета, свой шрифт (@font-face), полосы прокрутки; `frame.css` — кадр, неоновая кромка по контуру
-  изнутри, шапка, кнопки окна, нижняя строка (обходит выемку контура: её края `--notch-l` / `--notch-r` задаёт
-  `js/shape.js`; слева от выемки — полоса хода, справа — проценты и текст), ручки размера; `controls.css` — кнопки (срезы, стрелки), поля, выпадающие списки,
-  индикатор хода `.cprog`, стадии DECODE ▸ TEMPO ▸ KEY, списки кандидатов; `panels.css` — раскладка, строки списка,
-  панель трека; `effects.css` — дисперсия `.disp` (розовая и голубая копии расходятся от жёлтой сердцевины;
-  вспышка `.burst`, редкий сбой `.idle`), призменная волна `.prism`, бросание файлов; `splash.css` — заставка.
-- `js/app.js` — сборка окна и шаги для заставки (`boot`); `tracks.js` — треки и события очереди; `list.js` — список
-  (сортировка по столбцам, стрелки, Delete); `detail.js` — панель трека, ход разбора по стадиям, выбор кандидатов;
-  `draw.js` — рисунки с дисперсией (сетка долей, обзор волны, колесо высот по кругу квинт, дрейф); `music.js` —
-  обозначения (Am, Camelot, Open Key), `chooseTempo`; `view.js` — настройки (диапазон BPM, обозначение, знаки),
-  хранятся в localStorage; `select.js` — свой выпадающий список; `shape.js` — контур окна; `guard.js` — без
-  контекстного меню браузера и его клавиш (F5, Ctrl+R/P/F/U, масштаб, назад/вперёд); `export.js` — CSV;
-  `splash.js` — заставка; `demo.js` — треки для проверки окна (`App.demo()`); `tauri.js` — мост к Tauri.
-- `fonts/TempoKey-Regular.ttf`, `TempoKey-Bold.ttf` — свой шрифт (собирается `tools/font`).
+## Window — `ui/`
+- `index.html` — main window, `splash.html` — splash screen.
+- `css/base.css` — colours, the custom font (@font-face), scrollbars; `frame.css` — frame, neon edge along the outline
+  on the inside, title bar, window buttons, status bar (it goes around the outline notch: its edges `--notch-l` /
+  `--notch-r` are set by `js/shape.js`; left of the notch — the progress bar, right of it — percent and text), resize
+  handles; `controls.css` — buttons (cut corners, arrows), fields, drop-down lists, the `.cprog` progress bar, the
+  DECODE ▸ TEMPO ▸ KEY stages, candidate lists; `panels.css` — layout, list rows, track panel; `effects.css` —
+  `.disp` dispersion (pink and cyan copies split away from the yellow core; `.burst` flash, rare `.idle` glitch),
+  `.prism` prism sweep, file drop; `splash.css` — splash screen.
+- `js/app.js` — builds the window and reports steps to the splash (`boot`); `tracks.js` — tracks and queue events;
+  `list.js` — the list (sorting by column, arrows, Delete); `detail.js` — track panel, analysis progress by stage,
+  candidate picking; `draw.js` — drawings with dispersion (beat grid, waveform overview, pitch wheel along the circle
+  of fifths, drift); `music.js` — notation (Am, Camelot, Open Key), `chooseTempo`; `view.js` — settings (BPM range,
+  notation, decimals), stored in localStorage; `select.js` — the custom drop-down list; `shape.js` — window outline;
+  `guard.js` — no browser context menu and browser keys (F5, Ctrl+R/P/F/U, zoom, back/forward); `export.js` — CSV;
+  `splash.js` — splash screen; `demo.js` — tracks for checking the window (`App.demo()`); `tauri.js` — bridge to Tauri.
+- `fonts/TempoKey-Regular.ttf`, `TempoKey-Bold.ttf` — the custom font (built by `tools/font`).
 
-### Что умеет окно
-- Файлы: кнопки + FILES / + FOLDER, перетаскивание файлов и папок на окно; повторы пропускаются.
-- STOP останавливает очередь, затем RESUME продолжает; CLEAR — очистить список; EXPORT CSV.
-- BPM RANGE — диапазон выбора темпа (колесо мыши меняет); KEY — обозначение тональности; BPM — знаков после точки.
-- Ход: в строке трека — полоса и проценты; в панели трека — стадии и большая полоса; внизу — общий ход, номер и
-  имя текущего трека.
-- Панель трека: BPM и тональность с уверенностью, кандидаты (щелчок — выбрать вручную, повторный — вернуть
-  автоматический), сетка долей на отрезке с ударами, обзор волны, колесо высот, дрейф темпа, строй, первая доля.
-- Окно без рамки, своей формы (срезанные углы, выемка снизу), перетаскивание за шапку, двойной щелчок —
-  развернуть, края и уголок — изменить размер.
+### What the window can do
+- Files: + FILES / + FOLDER buttons, dragging files and folders onto the window; duplicates are skipped.
+- STOP stops the queue, then RESUME continues; CLEAR clears the list; EXPORT CSV.
+- BPM RANGE — the tempo selection range (mouse wheel changes it); KEY — key notation; BPM — decimal places.
+- Progress: a bar and percent in the track row; stages and a large bar in the track panel; overall progress, number
+  and name of the current track at the bottom.
+- Track panel: BPM and key with confidence, candidates (click to pick by hand, click again to return to automatic),
+  beat grid on an excerpt with hits, waveform overview, pitch wheel, tempo drift, tuning, first beat.
+- Borderless window with a custom shape (cut corners, a notch at the bottom), dragged by the title bar, double-click
+  to maximize, edges and the corner grip to resize.
 
-## Инструменты — `tools/`
-- `font/make_font.py` — шрифт TempoKey: `glyphs.py` (оси букв: латиница, кириллица, цифры одной ширины, знаки,
-  ♯ ♭), `pen.py` (штрих с острыми стыками и срезом на крутых поворотах), запись — fontTools; рядом `sample.png`.
-- `icon/make_icon.py` — значок и картинки установщика (`icons/`).
-- `testgen/check.py` + `examples/make_tests.rs` — проверка точности (см. выше).
-- `check/` — проверка окна без мыши через порт отладки WebView2: `run-debug.ps1`, `cdp.ps1`, `shots.ps1`
-  (снимки в трёх размерах), `splash-shots.ps1` (заставка), `desktop-shot.ps1` (снимок экрана с окном),
-  `region-info.ps1` (вырез окна), `dialog-check.ps1` (настоящий экран: кадры запуска, окно, открытый диалог
-  файлов, окно после его закрытия — нет ли белого и прямоугольника без формы).
+## Tools — `tools/`
+- `font/make_font.py` — the TempoKey font: `glyphs.py` (glyph skeletons: Latin, Cyrillic, fixed-width digits,
+  symbols, ♯ ♭), `pen.py` (strokes with sharp joins and a bevel on tight turns), written with fontTools; `sample.png`
+  next to it.
+- `icon/make_icon.py` — the icon and installer images (`icons/`).
+- `testgen/check.py` + `examples/make_tests.rs` — accuracy check (see above).
+- `check/` — mouse-free window check through the WebView2 debug port: `run-debug.ps1`, `cdp.ps1`, `shots.ps1`
+  (screenshots at three sizes), `splash-shots.ps1` (splash screen), `desktop-shot.ps1` (screen capture with the
+  window), `region-info.ps1` (window region), `dialog-check.ps1` (real screen: startup frames, the window, an open
+  file dialog, the window after it closes — checks for white areas and an unshaped rectangle).
 
-## Сборка
+## Build
 ```
 cargo build --release
 cargo tauri build
 ```
-Первая — программа `target\release\TempoKey.exe`; вторая — установщик NSIS
-`target\release\bundle\nsis\TempoKey_1.0.0_x64-setup.exe` (на английском, для текущего пользователя).
+The first builds the program `target\release\TempoKey.exe`; the second builds the NSIS installer
+`target\release\bundle\nsis\TempoKey_1.0.0_x64-setup.exe` (English, per-user install).
 
-Проверка точности:
+Accuracy check:
 ```
-cargo run --release --example make_tests -- <папка>
-python tools/testgen/check.py <папка>
+cargo run --release --example make_tests -- <folder>
+python tools/testgen/check.py <folder>
 ```
